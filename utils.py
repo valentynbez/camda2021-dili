@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 
 # NLP libraries
 import string
@@ -101,24 +102,31 @@ def compute_coherence(dictionary, corpus, texts, limit, start=2, step=3):
     return model_list, coherence_values
 
 
-def plot_coefficients(classifier, feature_names, top_features=15):
-    if type(best_svm.named_steps['clf']).__name__ == 'SGDClassifier':
-        coef = classifier.coef_.ravel()
-    elif type(best_svm.named_steps['clf']).__name__ == 'MultinomialNB':
-        coef = classifier.feature_log_prob_.ravel()
+def plot_coefficients(pipeline, top_features=15):
+    classifier = pipeline.named_steps['clf']
+    feature_names = pipeline.named_steps['vect'].get_feature_names()
+    
+    if type(classifier).__name__ == 'SGDClassifier':
+        coef = pipeline.named_steps['clf'].coef_.ravel()
+    elif type(pipeline.named_steps['clf']).__name__ == 'MultinomialNB':
+        coef = classifier.feature_log_prob_[1].ravel()
+       
     top_positive_coefficients = np.argsort(coef)[-top_features:]
     top_negative_coefficients = np.argsort(coef)[:top_features]
     top_coefficients = np.hstack([top_negative_coefficients, top_positive_coefficients])
+    
     # create plot
     plt.figure(figsize=(15, 5))
-    colors = ["red" if c < 0 else "blue" for c in coef[top_coefficients]]
-    plt.bar(np.arange(2 * top_features), coef[top_coefficients], color=colors)
+    colors = ["red"] * top_features + ["blue"] * top_features
+    plt.bar(np.arange(2 * top_features), np.sort(coef[top_coefficients]), color=colors)
     feature_names = np.array(feature_names)
-    plt.xticks(np.arange(0, 2 * top_features), feature_names[top_coefficients], rotation=60, ha="right")
+    plt.xticks(np.arange(0, 2 * top_features), feature_names[top_coefficients], 
+               rotation=60, ha="right")
+    
     plt.show()
 
     
-def prepare_data(train_str, test_str, model_type, mode='freq', num_words=80000, max_len=256):
+def prepare_data(train_str, test_str, model_type, mode='freq', num_words=80000, max_len=512):
     # create the tokenizer
     tokenizer = Tokenizer(num_words=num_words)
     # fit the tokenizer on the documents
@@ -136,7 +144,7 @@ def prepare_data(train_str, test_str, model_type, mode='freq', num_words=80000, 
     return X_train, X_test
 
 
-def compile_model(input_shape, learning_rate, model_type, num_words=80000, embedding_dim=128):
+def compile_model(input_shape, learning_rate, model_type, num_words=80000, embedding_dim=512):
     model = Sequential()
     if model_type == 'nbow':
         
@@ -159,3 +167,23 @@ def compile_model(input_shape, learning_rate, model_type, num_words=80000, embed
     opt = Adam(learning_rate=_learning_rate)
     model.compile(loss='binary_crossentropy', optimizer=opt, metrics=['accuracy'])
     return model
+
+
+def plot_training_curve(history):
+    plt.plot(history.history['accuracy'])
+    plt.plot(history.history['val_accuracy'])
+
+    plt.title('model accuracy')
+    plt.ylabel('accuracy')
+    plt.xlabel('epoch')
+    plt.legend(['train','test'], loc='upper left')
+    plt.show()
+
+    plt.plot(history.history['loss'])
+    plt.plot(history.history['val_loss'])
+
+    plt.title('model loss')
+    plt.ylabel('loss')
+    plt.xlabel('epoch')
+    plt.legend(['train','test'], loc='upper left')
+    plt.show()
