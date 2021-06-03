@@ -12,12 +12,14 @@ from gensim.models import CoherenceModel
 from nltk.corpus import stopwords, wordnet
 from nltk.stem import WordNetLemmatizer
 from gensim.models import wrappers
+from sklearn.feature_extraction.text import TfidfVectorizer
+from wordcloud import WordCloud
 
 # Deep learning
 from keras.preprocessing.text import Tokenizer
 from keras.models import Sequential
 from keras.layers.core import Activation, Dropout, Dense
-from keras.layers import Input, Flatten, LSTM, Embedding, SpatialDropout1D
+from keras.layers import Input, Flatten, LSTM, Embedding, SpatialDropout1D, Bidirectional
 from keras.models import Model
 from keras.optimizers import Adam
 from keras.preprocessing.sequence import pad_sequences
@@ -125,6 +127,47 @@ def plot_coefficients(pipeline, top_features=15):
     
     plt.show()
 
+
+def plot_wordclouds(data, top_n = 100):
+    tfidf = TfidfVectorizer()
+    fig, ax = plt.subplots(1, 2, figsize=(30,20), facecolor='white')
+    
+    for target, color in zip(range(2), ['plasma', 'viridis']):
+        response = tfidf.fit_transform(data.loc[data['target'] == target, 'lemma_str'])
+        freqs = sorted(list(zip(tfidf.get_feature_names(), response.sum(0).getA1())), key=lambda x: x[1], reverse=True)[:top_n]                         
+        formatted_dict = {' '.join(key.split('_')): v for key, v in dict(freqs).items()}
+        
+        wordcloud_pos = WordCloud(width=1600, height=1600,  
+                          background_color='white', colormap=color).generate_from_frequencies(formatted_dict)
+        
+        ax[target].imshow(wordcloud_pos, interpolation="bilinear")
+        ax[target].axis('off')
+    
+    ax[0].set_title('Negative', fontsize=80)
+    ax[1].set_title('Positive', fontsize=80)
+    
+    fig.suptitle('Top 100 most common words', fontsize=100)
+    fig.tight_layout();
+
+
+def plot_common_words(data, top_n=25):
+    fig, ax = plt.subplots(2, 1, figsize=(50,40))
+
+    for target in range(2):
+        response = tfidf.fit_transform(data.loc[data['target'] == target, 'lemma_str'])
+        freqs = sorted(list(zip(tfidf.get_feature_names(), response.sum(0).getA1())), key=lambda x: x[1], reverse=True)[:top_n] 
+        x, y = list(dict(freqs).keys()), list(dict(freqs).values())
+
+        ax[target].bar(x, y)
+        ax[target].set_xlabel('Words', fontsize=50)
+        ax[target].set_ylabel('TF-IDF of Words', fontsize=50)
+        ax[target].tick_params(axis='x', rotation=60, labelsize=40)
+        ax[target].tick_params(axis='y', labelsize=40)
+
+    ax[0].set_title('25 Most Common Words in Negative', fontsize=60)
+    ax[1].set_title('25 Most Common Words in Positive', fontsize=60)
+    fig.tight_layout();    
+
     
 def prepare_data(train_str, test_str, model_type, mode='freq', num_words=80000, max_len=512):
     # create the tokenizer
@@ -153,12 +196,20 @@ def compile_model(input_shape, learning_rate, model_type, num_words=80000, embed
         model.add(Dense(8, activation='relu'))
         model.add(Dense(1, activation='sigmoid'))
     
-    elif model_type == 'lstm':
+    else:
+        # The parameters are chosen so to make training on cuDNN kernel possible
         model.add(Embedding(num_words, embedding_dim, input_length=input_shape))
         model.add(SpatialDropout1D(0.2))
-        model.add(LSTM(128, activation='tanh', dropout=0.2, 
-                       recurrent_activation='sigmoid', recurrent_dropout=0.2, 
-                       unroll=False, use_bias=True))
+        
+        if model_type == 'lstm':
+            model.add(LSTM(512, activation='tanh', dropout=0.2, 
+                           recurrent_activation='sigmoid', recurrent_dropout=0, 
+                           unroll=False, use_bias=True))
+        elif model_type == 'bi-lstm':
+            model.add(Bidirectional(LSTM(512, activation='tanh', dropout=0.2, 
+                           recurrent_activation='sigmoid', recurrent_dropout=0, 
+                           unroll=False, use_bias=True)))
+
         model.add(Dense(1, activation='sigmoid'))
 
     
@@ -187,3 +238,5 @@ def plot_training_curve(history):
     plt.xlabel('epoch')
     plt.legend(['train','test'], loc='upper left')
     plt.show()
+    
+   
