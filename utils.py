@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib import cm
 
 # NLP libraries
 import string
@@ -14,6 +15,9 @@ from nltk.stem import WordNetLemmatizer
 from gensim.models import wrappers
 from sklearn.feature_extraction.text import TfidfVectorizer
 from wordcloud import WordCloud
+
+# ML utils 
+from sklearn.metrics import roc_curve, auc
 
 # Deep learning
 from keras.preprocessing.text import Tokenizer
@@ -239,4 +243,37 @@ def plot_training_curve(history):
     plt.legend(['train','test'], loc='upper left')
     plt.show()
     
-   
+
+def plot_roc(probs_df, y_test):
+    
+    fig, ax = plt.subplots(figsize=(10, 8))
+    fprs = []
+    tprs = []
+    aucs = []
+    for i, col in enumerate(probs_df):
+        probs = probs_df[col]
+        fpr, tpr, _ = roc_curve(y_test, probs)
+        fprs.append(fpr)
+        tprs.append(tpr)
+        
+        auc_score = auc(fpr, tpr)
+        aucs.append(auc_score)
+    
+    order_auc = np.argsort(aucs)
+
+    cmap = cm.viridis(np.linspace(0,1,5))[::-1]
+    
+    for n, color, name in zip(order_auc, cmap, probs_df.columns[order_auc]):
+        if n == order_auc[-1]:
+            ax.plot(fprs[n], tprs[n], c=color, label = f'{name}' + f' AUC = {aucs[n]:^.4f}', alpha=1, lw=2)
+        else:
+            ax.plot(fprs[n], tprs[n], c=color, label = f'{name}' + f' AUC = {aucs[n]:^.4f}', alpha=0.5)
+
+    ax.set_title('Receiver Operating Characteristic for BERTs')    
+    ax.legend(loc = 'lower right')
+    ax.plot([0, 1], [0, 1],'r--')
+    ax.set_xlim([-0.005, 0.305])
+    ax.set_ylim([0.705, 1.005])
+    ax.set_ylabel('True Positive Rate')
+    ax.set_xlabel('False Positive Rate')
+    plt.show()
